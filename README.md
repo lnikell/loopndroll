@@ -71,7 +71,7 @@ security find-identity -v -p codesigning
 - `Packaging/Info.plist`: app bundle metadata used by the packager
 - `scripts/package_app.sh`: release packaging script
 
-The app binary also supports `--hook` mode so the installed hook can point at a stable copied executable in `~/Library/Application Support/loopndroll/bin/loopndroll-hook`.
+Release builds bundle `LoopndrollHook` under `Loopndroll.app/Contents/Helpers/LoopndrollHook`, and the app installs that helper as the managed hook executable in `~/Library/Application Support/loopndroll/bin/loopndroll-hook`. The app binary also supports `--hook` mode for local development.
 
 ## Build
 

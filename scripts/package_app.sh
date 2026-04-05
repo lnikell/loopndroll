@@ -8,6 +8,7 @@ APP_NAME="Loopndroll"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
+HELPERS_DIR="$CONTENTS_DIR/Helpers"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 ZIP_PATH="$DIST_DIR/$APP_NAME.app.zip"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
@@ -16,14 +17,17 @@ cd "$ROOT_DIR"
 
 echo "Building release binary..."
 swift build -c release --product "$APP_NAME"
+swift build -c release --product "LoopndrollHook"
 
 echo "Preparing app bundle..."
 rm -rf "$APP_DIR"
-mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+mkdir -p "$MACOS_DIR" "$HELPERS_DIR" "$RESOURCES_DIR"
 
 cp "$BUILD_DIR/$APP_NAME" "$MACOS_DIR/$APP_NAME"
+cp "$BUILD_DIR/LoopndrollHook" "$HELPERS_DIR/LoopndrollHook"
 cp "$ROOT_DIR/Packaging/Info.plist" "$CONTENTS_DIR/Info.plist"
 chmod 755 "$MACOS_DIR/$APP_NAME"
+chmod 755 "$HELPERS_DIR/LoopndrollHook"
 printf 'APPL????' > "$CONTENTS_DIR/PkgInfo"
 
 if [[ "$SIGN_IDENTITY" == "-" ]]; then

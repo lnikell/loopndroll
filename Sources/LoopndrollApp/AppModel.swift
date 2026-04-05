@@ -13,15 +13,19 @@ final class AppModel {
     var errorMessage: String?
 
     private let paths: LoopndrollPaths
-    private let executableURL: URL
+    private let hookExecutableURL: URL
     private var hasStarted = false
 
     init(
         paths: LoopndrollPaths = .live(),
-        executableURL: URL = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
+        executableURL: URL = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0]),
+        bundleURL: URL? = Bundle.main.bundleURL
     ) {
         self.paths = paths
-        self.executableURL = executableURL
+        self.hookExecutableURL = ManagedHookExecutableResolver.sourceExecutableURL(
+            currentExecutableURL: executableURL,
+            bundleURL: bundleURL
+        )
     }
 
     func startIfNeeded() {
@@ -116,9 +120,9 @@ final class AppModel {
 
         do {
             let paths = self.paths
-            let executableURL = self.executableURL
+            let hookExecutableURL = self.hookExecutableURL
             let report = try await runIO {
-                try InstallationManager(paths: paths).repair(using: executableURL)
+                try InstallationManager(paths: paths).repair(using: hookExecutableURL)
             }
 
             installationHealthy = report.health.isHealthy
