@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { chmod, copyFile, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, dirname } from "node:path";
 import { eq } from "drizzle-orm";
 import type { LoopndrollSnapshot } from "../shared/app-rpc";
 import { getLoopndrollDatabase } from "./db/client";
@@ -94,7 +95,20 @@ async function ensureCodexConfig(paths: LoopndrollPaths) {
 }
 
 function quoteCommandPath(path: string) {
+  if (process.platform === "win32") {
+    return `"${path.replaceAll('"', '""')}"`;
+  }
+
   return `'${path.replaceAll("'", `'\\''`)}'`;
+}
+
+function buildWindowsManagedHookLauncher(paths: LoopndrollPaths) {
+  return [
+    "@echo off",
+    "setlocal",
+    `bun "%~dp0${basename(paths.managedHookScriptPath)}" %*`,
+    "",
+  ].join("\r\n");
 }
 
 function isManagedHookCommand(command: string | undefined) {
@@ -177,23 +191,35 @@ function upsertManagedHooks(paths: LoopndrollPaths, hooksDocument: HooksDocument
 
 async function ensureManagedHookScript(paths: LoopndrollPaths) {
   await ensureDirectory(paths.binDirectoryPath);
-  const existingContent = await readFile(paths.managedHookPath, "utf8").catch(() => null);
+  const existingContent = await readFile(paths.managedHookScriptPath, "utf8").catch(() => null);
   if (existingContent && !existingContent.includes(MANAGED_HOOK_SCRIPT_MARKER)) {
-    const backupPath = `${paths.managedHookPath}.bak.${Date.now()}`;
-    await copyFile(paths.managedHookPath, backupPath);
+    const backupPath = `${paths.managedHookScriptPath}.bak.${Date.now()}`;
+    await copyFile(paths.managedHookScriptPath, backupPath);
   }
 
-  await writeFile(paths.managedHookPath, buildManagedHookScript(paths), "utf8");
-  await chmod(paths.managedHookPath, 0o755);
+  await writeFile(paths.managedHookScriptPath, buildManagedHookScript(paths), "utf8");
+
+  if (process.platform === "win32") {
+    await writeFile(paths.managedHookPath, buildWindowsManagedHookLauncher(paths), "utf8");
+    return;
+  }
+
+  await chmod(paths.managedHookScriptPath, 0o755);
 }
 
 async function computeHealth(paths: LoopndrollPaths) {
   const issues: string[] = [];
   const configContents = await readFile(paths.codexConfigPath, "utf8").catch(() => null);
   const hooksDocument = await loadHooksDocument(paths);
-  const scriptExists = await stat(paths.managedHookPath)
+  const commandExists = await stat(paths.managedHookPath)
     .then(() => true)
     .catch(() => false);
+  const scriptExists =
+    paths.managedHookScriptPath === paths.managedHookPath
+      ? commandExists
+      : await stat(paths.managedHookScriptPath)
+          .then(() => true)
+          .catch(() => false);
   const hookEvents = hooksDocument.hooks ?? {};
   const hasManagedSessionStart = (hookEvents.SessionStart ?? []).some((group) =>
     (group.hooks ?? []).some((hook) => isManagedHookCommand(hook.command)),
@@ -217,8 +243,11 @@ async function computeHealth(paths: LoopndrollPaths) {
   if (!hasManagedUserPromptSubmit) {
     issues.push("Managed UserPromptSubmit hook is not registered.");
   }
+  if (!commandExists) {
+    issues.push("Managed hook launcher is missing.");
+  }
   if (!scriptExists) {
-    issues.push("Managed hook executable is missing.");
+    issues.push("Managed hook script is missing.");
   }
 
   return {
@@ -303,7 +332,23 @@ export async function revealHooksFile() {
   const paths = getLoopndrollPaths();
   await ensureDirectory(paths.codexDirectoryPath);
 
-  const child = spawn("open", ["-R", paths.codexHooksPath], {
+  const revealCommand =
+    process.platform === "win32"
+      ? {
+          command: "explorer.exe",
+          args: [`/select,${paths.codexHooksPath.replaceAll("/", "\\")}`],
+        }
+      : process.platform === "darwin"
+        ? {
+            command: "open",
+            args: ["-R", paths.codexHooksPath],
+          }
+        : {
+            command: "xdg-open",
+            args: [dirname(paths.codexHooksPath)],
+          };
+
+  const child = spawn(revealCommand.command, revealCommand.args, {
     stdio: "ignore",
     detached: true,
   });

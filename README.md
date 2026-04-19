@@ -133,6 +133,11 @@ If you were looking for a Slack token: this app does not need one for Slack noti
 - `pnpm run build` - build the app
 - `pnpm run build:stable` - build the release version
 
+## Platform notes
+
+- Loopndroll stores app data in the platform app-data directory, such as `~/Library/Application Support/loopndroll` on macOS and `%LocalAppData%\loopndroll` on Windows.
+- Completion checks run through the native shell for the current platform: `cmd.exe /c` on Windows and the current POSIX shell on macOS/Linux.
+
 ## Useful Links
 
 - Telegram BotFather: [https://t.me/BotFather](https://t.me/BotFather)

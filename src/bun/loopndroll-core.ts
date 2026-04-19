@@ -49,6 +49,7 @@ export type LoopndrollPaths = {
   logsDirectoryPath: string;
   databasePath: string;
   managedHookPath: string;
+  managedHookScriptPath: string;
   hookDebugLogPath: string;
   codexDirectoryPath: string;
   codexConfigPath: string;
@@ -87,13 +88,21 @@ export const TELEGRAM_NOTIFICATION_FOOTER =
   "Reply to this message in Telegram to continue this Codex chat.";
 export const TELEGRAM_ALLOWED_UPDATES = ["message", "channel_post", "my_chat_member", "chat_member"];
 
+function getAppDataRootPath() {
+  if (process.platform === "darwin") {
+    return join(homedir(), "Library", "Application Support");
+  }
+
+  if (process.platform === "win32") {
+    return process.env["LOCALAPPDATA"] || process.env["APPDATA"] || join(homedir(), "AppData", "Local");
+  }
+
+  return process.env["XDG_DATA_HOME"] || join(homedir(), ".local", "share");
+}
+
 export function getLoopndrollPaths(): LoopndrollPaths {
-  const appDirectoryPath = join(
-    homedir(),
-    "Library",
-    "Application Support",
-    APP_SUPPORT_DIRECTORY_NAME,
-  );
+  const appDirectoryPath = join(getAppDataRootPath(), APP_SUPPORT_DIRECTORY_NAME);
+  const managedHookScriptPath = join(appDirectoryPath, "bin", "loopndroll-hook.mjs");
   const codexDirectoryPath = join(homedir(), ".codex");
 
   return {
@@ -101,7 +110,11 @@ export function getLoopndrollPaths(): LoopndrollPaths {
     binDirectoryPath: join(appDirectoryPath, "bin"),
     logsDirectoryPath: join(appDirectoryPath, "logs"),
     databasePath: join(appDirectoryPath, "app.db"),
-    managedHookPath: join(appDirectoryPath, "bin", "loopndroll-hook"),
+    managedHookPath:
+      process.platform === "win32"
+        ? join(appDirectoryPath, "bin", "loopndroll-hook.cmd")
+        : managedHookScriptPath,
+    managedHookScriptPath,
     hookDebugLogPath: join(appDirectoryPath, "logs", "hooks-debug.jsonl"),
     codexDirectoryPath,
     codexConfigPath: join(codexDirectoryPath, "config.toml"),

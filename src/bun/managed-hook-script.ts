@@ -16,6 +16,20 @@ import {
   MANAGED_HOOK_SCRIPT_MARKER,
 } from "./loopndroll-core";
 
+function getCompletionCheckRunner() {
+  if (process.platform === "win32") {
+    return {
+      command: process.env["COMSPEC"] || "cmd.exe",
+      args: ["/d", "/s", "/c"],
+    };
+  }
+
+  return {
+    command: process.env["SHELL"] || "/bin/sh",
+    args: ["-lc"],
+  };
+}
+
 export function buildManagedHookScript(paths: LoopndrollPaths) {
   const preamble = `#!/usr/bin/env bun
 // ${MANAGED_HOOK_SCRIPT_MARKER}
@@ -35,6 +49,7 @@ const telegramNotificationFooter = ${JSON.stringify(TELEGRAM_NOTIFICATION_FOOTER
 const hookDebugLogEnvName = ${JSON.stringify(HOOK_DEBUG_LOG_ENV_NAME)};
 const redactedDebugValue = ${JSON.stringify(REDACTED_DEBUG_VALUE)};
 const hookDebugRedactedKeys = ${JSON.stringify([...HOOK_DEBUG_REDACTED_KEYS])};
+const completionCheckRunner = ${JSON.stringify(getCompletionCheckRunner())};
 const sqlitePragmas = ${JSON.stringify([...SQLITE_PRAGMA_STATEMENTS])};
 const appMigrations = ${JSON.stringify(appMigrations)};
 `;
@@ -44,5 +59,10 @@ const appMigrations = ${JSON.stringify(appMigrations)};
     MANAGED_HOOK_SCRIPT_CHUNK_1,
     MANAGED_HOOK_SCRIPT_CHUNK_2,
     MANAGED_HOOK_SCRIPT_CHUNK_3,
-  ].join("");
+  ]
+    .join("")
+    .replace(
+      'spawnSync("/bin/sh", ["-lc", command], {',
+      "spawnSync(completionCheckRunner.command, [...completionCheckRunner.args, command], {",
+    );
 }
