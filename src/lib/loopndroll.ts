@@ -10,9 +10,12 @@ import { getAppRpc } from "./app-rpc";
 export type {
   CompletionCheck,
   CreateLoopNotificationInput,
+  HookLifecycleStatus,
+  HookRemovalWatcherStatus,
   LoopNotification,
   LoopPreset,
   LoopScope,
+  LoopndrollRuntimeState,
   LoopndrollSnapshot,
   LoopSession,
   TelegramChatOption,
@@ -65,6 +68,11 @@ export async function updateNotification(notification: UpdateLoopNotificationInp
   return rpc?.request.updateNotification({ notification });
 }
 
+export async function migrateNotificationSecretsToKeychain() {
+  const rpc = await getAppRpc();
+  return rpc?.request.migrateNotificationSecretsToKeychain();
+}
+
 export async function updateCompletionCheck(completionCheck: {
   id: string;
   label?: string;
@@ -115,6 +123,11 @@ export async function setGlobalCompletionCheckConfig(
   });
 }
 
+export async function setMirrorEnabled(enabled: boolean) {
+  const rpc = await getAppRpc();
+  return rpc?.request.setMirrorEnabled({ enabled });
+}
+
 export async function setSessionPreset(sessionId: string, preset: LoopPreset | null) {
   const rpc = await getAppRpc();
   return rpc?.request.setSessionPreset({ sessionId, preset });
@@ -151,6 +164,26 @@ export async function registerHooks() {
 export async function clearHooks() {
   const rpc = await getAppRpc();
   return rpc?.request.clearHooks();
+}
+
+export async function pauseLoopndroll() {
+  const rpc = await getAppRpc();
+  return rpc?.request.pauseLoopndroll();
+}
+
+export async function resumeLoopndroll() {
+  const rpc = await getAppRpc();
+  return rpc?.request.resumeLoopndroll();
+}
+
+export async function startLoopndroll() {
+  const rpc = await getAppRpc();
+  return rpc?.request.startLoopndroll();
+}
+
+export async function stopLoopndroll() {
+  const rpc = await getAppRpc();
+  return rpc?.request.stopLoopndroll();
 }
 
 export async function revealHooksFile() {

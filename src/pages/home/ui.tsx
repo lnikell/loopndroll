@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 const globalPresets: Array<{
   preset: LoopPreset;
   title: string;
+  description: string;
   marker: ReactNode;
   theme: ChatCardTheme;
   markerContainerClassName?: string;
@@ -36,24 +37,28 @@ const globalPresets: Array<{
   {
     preset: "infinite",
     title: "Infinite",
+    description: "Keep Codex moving with the continue prompt until you stop it.",
     marker: <InfiniteCardIcon />,
     theme: "orange",
   },
   {
     preset: "await-reply",
     title: "Await Reply",
+    description: "Notify Telegram, then wait for your reply before continuing.",
     marker: <AwaitReplyCardIcon />,
     theme: "cyan",
   },
   {
     preset: "completion-checks",
     title: "Completion Checks",
+    description: "Run your checks at Stop and continue only when they pass.",
     marker: <CompletionChecksCardIcon />,
     theme: "emerald",
   },
   {
     preset: "max-turns-1",
     title: "Max Turns",
+    description: "Allow one more continuation, then let Codex stop.",
     marker: <TurnCountMarker className="-ml-0.5" value={1} />,
     theme: "olive",
     markerContainerClassName: "-ml-0.5",
@@ -61,12 +66,14 @@ const globalPresets: Array<{
   {
     preset: "max-turns-2",
     title: "Max Turns",
+    description: "Allow two more continuations before stopping.",
     marker: <TurnCountMarker value={2} />,
     theme: "olive",
   },
   {
     preset: "max-turns-3",
     title: "Max Turns",
+    description: "Allow three more continuations before stopping.",
     marker: <TurnCountMarker value={3} />,
     theme: "olive",
   },
@@ -179,8 +186,8 @@ function stripMarkdownTitle(value: string) {
 }
 
 function getSessionNumber(session: LoopSession, fallbackNumber: number) {
-  const codexNumber = /^\d+$/.test(session.sessionId)
-    ? Number.parseInt(session.sessionId, 10)
+  const codexNumber = /^\d+$/.test(session.threadId)
+    ? Number.parseInt(session.threadId, 10)
     : undefined;
   return typeof codexNumber === "number" && Number.isSafeInteger(codexNumber) && codexNumber > 0
     ? codexNumber
@@ -192,11 +199,11 @@ export function getSessionRef(session: LoopSession, fallbackNumber: number) {
 }
 
 export function getSessionPrompt(session: LoopSession) {
-  if (!session.title) {
+  if (!session.threadName) {
     return null;
   }
 
-  const prompt = stripMarkdownTitle(session.title);
+  const prompt = stripMarkdownTitle(session.threadName);
   return prompt || null;
 }
 
@@ -280,7 +287,7 @@ export function ChatCardRail({
 }) {
   return (
     <div className="-mx-16 min-w-0 overflow-hidden">
-      <div className="flex snap-x snap-mandatory gap-6 overflow-x-auto pl-16 pr-16 pt-1 pb-3 [scroll-padding-left:4rem] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex snap-x snap-mandatory gap-5 overflow-x-auto pl-16 pr-16 pt-1 pb-2 [scroll-padding-left:4rem] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {globalPresets.map((item) => (
           <ChatCard
             key={item.preset}
@@ -291,6 +298,7 @@ export function ChatCardRail({
             onAction={() => onToggle(item.preset)}
             footerStart={renderFooterStart?.(item.preset)}
             title={item.title}
+            description={item.description}
           />
         ))}
       </div>

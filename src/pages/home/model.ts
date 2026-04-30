@@ -27,7 +27,8 @@ function syncPendingSessionPresets(
 
   const currentKeys = Object.keys(current);
   const nextKeys = Object.keys(next);
-  return currentKeys.length === nextKeys.length && nextKeys.every((key) => current[key] === next[key])
+  return currentKeys.length === nextKeys.length &&
+    nextKeys.every((key) => current[key] === next[key])
     ? current
     : next;
 }
@@ -63,10 +64,7 @@ function useSessionClock() {
   return now;
 }
 
-function hasAttachedTelegramNotification(
-  session: LoopSession,
-  notifications: LoopNotification[],
-) {
+function hasAttachedTelegramNotification(session: LoopSession, notifications: LoopNotification[]) {
   return session.notificationIds.some((notificationId) =>
     notifications.some(
       (notification) => notification.id === notificationId && notification.channel === "telegram",
@@ -74,9 +72,11 @@ function hasAttachedTelegramNotification(
   );
 }
 
-function showAwaitReplyNotificationToast(session: LoopSession, sessionRefs: Map<string, string>) {
+function showTelegramNotificationToast(session: LoopSession, sessionRefs: Map<string, string>) {
   const sessionRef = sessionRefs.get(session.sessionId) ?? "C0";
-  toast.error(`[${sessionRef}] Attach a Telegram notification first to use Await Reply.`);
+  toast.error(
+    `[${sessionRef}] Attach a Telegram notification from the three-dot menu before using Await Reply.`,
+  );
 }
 
 function showCompletionCheckConfigToast(
@@ -104,7 +104,9 @@ function createHomeRouteActions(args: {
   updateSessionPreset: ReturnType<typeof useLoopndrollState>["updateSessionPreset"];
 }) {
   const hasConfiguredGlobalCompletionCheck = () =>
-    args.completionChecks.some((completionCheck) => completionCheck.id === args.snapshot?.globalCompletionCheckId);
+    args.completionChecks.some(
+      (completionCheck) => completionCheck.id === args.snapshot?.globalCompletionCheckId,
+    );
 
   return {
     hasConfiguredGlobalCompletionCheck,
@@ -133,7 +135,7 @@ function createHomeRouteActions(args: {
         pendingPreset === "await-reply" &&
         !hasAttachedTelegramNotification(session, args.notifications)
       ) {
-        showAwaitReplyNotificationToast(session, args.sessionRefs);
+        showTelegramNotificationToast(session, args.sessionRefs);
         return;
       }
 
@@ -144,7 +146,7 @@ function createHomeRouteActions(args: {
         nextPreset === "await-reply" &&
         !hasAttachedTelegramNotification(session, args.notifications)
       ) {
-        showAwaitReplyNotificationToast(session, args.sessionRefs);
+        showTelegramNotificationToast(session, args.sessionRefs);
         return;
       }
 
@@ -194,13 +196,15 @@ export function useHomeRouteModel() {
     [sessions, showArchivedSessions],
   );
   const sortedSessions = useMemo(
-    () => [...displaySessions].sort((left, right) => right.firstSeenAt.localeCompare(left.firstSeenAt)),
+    () =>
+      [...displaySessions].sort((left, right) => right.firstSeenAt.localeCompare(left.firstSeenAt)),
     [displaySessions],
   );
   const { pendingSessionPresets, setPendingSessionPresets } =
     usePendingSessionPresets(displaySessions);
   const now = useSessionClock();
-  const sessionRefs = useMemo(() => createSessionRefs(sessions), [sessions]);
+  const visibleSessions = sessions;
+  const sessionRefs = useMemo(() => createSessionRefs(visibleSessions), [visibleSessions]);
   const actions = createHomeRouteActions({
     completionChecks,
     notifications,

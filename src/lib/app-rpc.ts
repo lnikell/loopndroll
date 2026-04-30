@@ -44,6 +44,11 @@ type AppRpc = {
     updateNotification: (
       params: AppRpcSchema["bun"]["requests"]["updateNotification"]["params"],
     ) => Promise<AppRpcSchema["bun"]["requests"]["updateNotification"]["response"]>;
+    migrateNotificationSecretsToKeychain: AppRpcSchema["bun"]["requests"]["migrateNotificationSecretsToKeychain"]["params"] extends undefined
+      ? () => Promise<
+          AppRpcSchema["bun"]["requests"]["migrateNotificationSecretsToKeychain"]["response"]
+        >
+      : never;
     updateCompletionCheck: (
       params: AppRpcSchema["bun"]["requests"]["updateCompletionCheck"]["params"],
     ) => Promise<AppRpcSchema["bun"]["requests"]["updateCompletionCheck"]["response"]>;
@@ -68,6 +73,9 @@ type AppRpc = {
     setGlobalCompletionCheckConfig: (
       params: AppRpcSchema["bun"]["requests"]["setGlobalCompletionCheckConfig"]["params"],
     ) => Promise<AppRpcSchema["bun"]["requests"]["setGlobalCompletionCheckConfig"]["response"]>;
+    setMirrorEnabled: (
+      params: AppRpcSchema["bun"]["requests"]["setMirrorEnabled"]["params"],
+    ) => Promise<AppRpcSchema["bun"]["requests"]["setMirrorEnabled"]["response"]>;
     setSessionPreset: (
       params: AppRpcSchema["bun"]["requests"]["setSessionPreset"]["params"],
     ) => Promise<AppRpcSchema["bun"]["requests"]["setSessionPreset"]["response"]>;
@@ -85,6 +93,18 @@ type AppRpc = {
       : never;
     clearHooks: AppRpcSchema["bun"]["requests"]["clearHooks"]["params"] extends undefined
       ? () => Promise<AppRpcSchema["bun"]["requests"]["clearHooks"]["response"]>
+      : never;
+    pauseLoopndroll: AppRpcSchema["bun"]["requests"]["pauseLoopndroll"]["params"] extends undefined
+      ? () => Promise<AppRpcSchema["bun"]["requests"]["pauseLoopndroll"]["response"]>
+      : never;
+    resumeLoopndroll: AppRpcSchema["bun"]["requests"]["resumeLoopndroll"]["params"] extends undefined
+      ? () => Promise<AppRpcSchema["bun"]["requests"]["resumeLoopndroll"]["response"]>
+      : never;
+    startLoopndroll: AppRpcSchema["bun"]["requests"]["startLoopndroll"]["params"] extends undefined
+      ? () => Promise<AppRpcSchema["bun"]["requests"]["startLoopndroll"]["response"]>
+      : never;
+    stopLoopndroll: AppRpcSchema["bun"]["requests"]["stopLoopndroll"]["params"] extends undefined
+      ? () => Promise<AppRpcSchema["bun"]["requests"]["stopLoopndroll"]["response"]>
       : never;
     revealHooksFile: AppRpcSchema["bun"]["requests"]["revealHooksFile"]["params"] extends undefined
       ? () => Promise<AppRpcSchema["bun"]["requests"]["revealHooksFile"]["response"]>

@@ -25,6 +25,53 @@ export type AppUpdateState = {
 };
 
 export type LoopScope = "global" | "per-task";
+export type LoopndrollRuntimeState = "running" | "paused" | "stopped";
+export type HookLifecycleRequestedAction =
+  | "none"
+  | "pause"
+  | "resume"
+  | "start"
+  | "stop"
+  | "clear-managed-hook";
+export type HookLifecycleAppliedAction =
+  | "none"
+  | "running"
+  | "soft-pause"
+  | "full-removal"
+  | "full-removal-deferred";
+export type HookLifecycleDeferredAction = "none" | "remove-managed-hooks-and-unload-runtime";
+export type HookLifecycleRisk =
+  | "none"
+  | "active-processes-detected"
+  | "activity-unknown"
+  | "runtime-unload-unproven";
+
+export type HookLifecycleStatus = {
+  requestedAction: HookLifecycleRequestedAction;
+  appliedAction: HookLifecycleAppliedAction;
+  deferredAction: HookLifecycleDeferredAction;
+  remainingRisk: HookLifecycleRisk;
+  nextAutomaticStep: string | null;
+  message: string;
+  pending: boolean;
+  checkedAt: string | null;
+  objectives: {
+    inertNow: boolean;
+    removedFromHooksJson: boolean;
+    unloadedFromLiveRuntime: boolean;
+  };
+};
+
+export type HookRemovalWatcherStatus = {
+  active: boolean;
+  pid: number | null;
+  lockPath: string;
+  startedAt: string | null;
+  repoRoot: string | null;
+  hooksPath: string | null;
+  runtimeStatePath: string | null;
+  message: string;
+};
 
 export type LoopPreset =
   | "infinite"
@@ -92,6 +139,7 @@ export type UpdateLoopNotificationInput = CreateLoopNotificationInput & {
 };
 
 export type LoopSession = {
+  threadId: string;
   sessionId: string;
   sessionRef: string;
   source: "startup" | "resume" | "stop";
@@ -109,6 +157,7 @@ export type LoopSession = {
   completionCheckWaitForReply: boolean;
   effectiveCompletionCheckId: string | null;
   effectiveCompletionCheckWaitForReply: boolean;
+  threadName: string | null;
   title: string | null;
   transcriptPath: string | null;
   lastAssistantMessage: string | null;
@@ -117,17 +166,21 @@ export type LoopSession = {
 export type LoopndrollSnapshot = {
   defaultPrompt: string;
   scope: LoopScope;
+  runtimeState: LoopndrollRuntimeState;
   globalPreset: LoopPreset | null;
   globalNotificationId: string | null;
   globalCompletionCheckId: string | null;
   globalCompletionCheckWaitForReply: boolean;
   hooksAutoRegistration: boolean;
+  mirrorEnabled: boolean;
   notifications: LoopNotification[];
   completionChecks: CompletionCheck[];
   health: {
     registered: boolean;
     issues: string[];
+    hookRemovalWatcher: HookRemovalWatcherStatus;
   };
+  hookLifecycle: HookLifecycleStatus;
   sessions: LoopSession[];
 };
 
@@ -208,6 +261,10 @@ export type AppRpcSchema = {
         };
         response: LoopndrollSnapshot;
       };
+      migrateNotificationSecretsToKeychain: {
+        params: undefined;
+        response: LoopndrollSnapshot;
+      };
       updateCompletionCheck: {
         params: {
           completionCheck: {
@@ -262,6 +319,12 @@ export type AppRpcSchema = {
         };
         response: LoopndrollSnapshot;
       };
+      setMirrorEnabled: {
+        params: {
+          enabled: boolean;
+        };
+        response: LoopndrollSnapshot;
+      };
       setSessionPreset: {
         params: {
           sessionId: string;
@@ -295,6 +358,22 @@ export type AppRpcSchema = {
         response: LoopndrollSnapshot;
       };
       clearHooks: {
+        params: undefined;
+        response: LoopndrollSnapshot;
+      };
+      pauseLoopndroll: {
+        params: undefined;
+        response: LoopndrollSnapshot;
+      };
+      resumeLoopndroll: {
+        params: undefined;
+        response: LoopndrollSnapshot;
+      };
+      startLoopndroll: {
+        params: undefined;
+        response: LoopndrollSnapshot;
+      };
+      stopLoopndroll: {
         params: undefined;
         response: LoopndrollSnapshot;
       };

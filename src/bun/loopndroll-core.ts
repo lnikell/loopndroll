@@ -10,13 +10,22 @@ import type {
   LoopPreset,
   LoopScope,
   LoopSession,
+  HookLifecycleStatus,
+  LoopndrollSnapshot,
   LoopSessionPresetSource,
+  LoopndrollRuntimeState,
 } from "../shared/app-rpc";
 import {
+  HOOK_LIFECYCLE_APPLIED_ACTION_VALUES,
+  HOOK_LIFECYCLE_DEFERRED_ACTION_VALUES,
+  HOOK_LIFECYCLE_REQUESTED_ACTION_VALUES,
+  HOOK_LIFECYCLE_RISK_VALUES,
   LOOP_PRESET_VALUES,
+  LOOPNDROLL_RUNTIME_STATE_VALUES,
   LOOP_SCOPE_VALUES,
   LOOP_SESSION_SOURCE_VALUES,
 } from "./constants";
+import type { CanonicalThreadDiscoveryRecord } from "./codex-app-server-client";
 import { getLoopndrollDatabase } from "./db/client";
 import {
   completionChecks,
@@ -25,6 +34,8 @@ import {
   sessions,
   settings,
 } from "./db/schema";
+import { resolveSlackWebhookUrl, resolveTelegramBotToken } from "./secret-store";
+import { looksInternalThreadNameArtifact } from "./thread-name-artifact";
 
 export type HookHandler = {
   type?: string;
@@ -46,9 +57,12 @@ export type HooksDocument = {
 export type LoopndrollPaths = {
   appDirectoryPath: string;
   binDirectoryPath: string;
+  stateDirectoryPath: string;
   logsDirectoryPath: string;
   databasePath: string;
   managedHookPath: string;
+  hookRemovalWatchLockPath: string;
+  startupRecoveryMarkerPath: string;
   hookDebugLogPath: string;
   codexDirectoryPath: string;
   codexConfigPath: string;
@@ -85,7 +99,12 @@ export const AWAIT_REPLY_POLL_INTERVAL_MS = 500;
 export const TELEGRAM_MAX_MESSAGE_LENGTH = 4096;
 export const TELEGRAM_NOTIFICATION_FOOTER =
   "Reply to this message in Telegram to continue this Codex chat.";
-export const TELEGRAM_ALLOWED_UPDATES = ["message", "channel_post", "my_chat_member", "chat_member"];
+export const TELEGRAM_ALLOWED_UPDATES = [
+  "message",
+  "channel_post",
+  "my_chat_member",
+  "chat_member",
+];
 
 export function getLoopndrollPaths(): LoopndrollPaths {
   const appDirectoryPath = join(
@@ -99,9 +118,12 @@ export function getLoopndrollPaths(): LoopndrollPaths {
   return {
     appDirectoryPath,
     binDirectoryPath: join(appDirectoryPath, "bin"),
+    stateDirectoryPath: join(appDirectoryPath, "state"),
     logsDirectoryPath: join(appDirectoryPath, "logs"),
     databasePath: join(appDirectoryPath, "app.db"),
     managedHookPath: join(appDirectoryPath, "bin", "loopndroll-hook"),
+    hookRemovalWatchLockPath: join(appDirectoryPath, "state", "hook-removal-watch.lock"),
+    startupRecoveryMarkerPath: join(appDirectoryPath, "state", "startup-runtime.marker.json"),
     hookDebugLogPath: join(appDirectoryPath, "logs", "hooks-debug.jsonl"),
     codexDirectoryPath,
     codexConfigPath: join(codexDirectoryPath, "config.toml"),
@@ -180,6 +202,88 @@ export async function appendHookDebugLog(paths: LoopndrollPaths, entry: Record<s
 
 export function normalizeLoopPreset(value: unknown): LoopPreset | null {
   return LOOP_PRESET_VALUES.includes(value as LoopPreset) ? (value as LoopPreset) : null;
+}
+
+export function normalizeLoopndrollRuntimeState(value: unknown): LoopndrollRuntimeState {
+  return LOOPNDROLL_RUNTIME_STATE_VALUES.includes(value as LoopndrollRuntimeState)
+    ? (value as LoopndrollRuntimeState)
+    : "running";
+}
+
+export function createDefaultHookLifecycleStatus(): HookLifecycleStatus {
+  return {
+    requestedAction: "none",
+    appliedAction: "none",
+    deferredAction: "none",
+    remainingRisk: "none",
+    nextAutomaticStep: null,
+    message: "No hook lifecycle action has been requested.",
+    pending: false,
+    checkedAt: null,
+    objectives: {
+      inertNow: false,
+      removedFromHooksJson: false,
+      unloadedFromLiveRuntime: false,
+    },
+  };
+}
+
+function normalizeHookLifecycleStatus(value: unknown): HookLifecycleStatus {
+  const fallback = createDefaultHookLifecycleStatus();
+  if (typeof value !== "object" || value === null) {
+    return fallback;
+  }
+
+  const record = value as Partial<HookLifecycleStatus>;
+  const objectives =
+    typeof record.objectives === "object" && record.objectives !== null
+      ? record.objectives
+      : fallback.objectives;
+
+  return {
+    requestedAction: HOOK_LIFECYCLE_REQUESTED_ACTION_VALUES.includes(
+      record.requestedAction as HookLifecycleStatus["requestedAction"],
+    )
+      ? (record.requestedAction as HookLifecycleStatus["requestedAction"])
+      : fallback.requestedAction,
+    appliedAction: HOOK_LIFECYCLE_APPLIED_ACTION_VALUES.includes(
+      record.appliedAction as HookLifecycleStatus["appliedAction"],
+    )
+      ? (record.appliedAction as HookLifecycleStatus["appliedAction"])
+      : fallback.appliedAction,
+    deferredAction: HOOK_LIFECYCLE_DEFERRED_ACTION_VALUES.includes(
+      record.deferredAction as HookLifecycleStatus["deferredAction"],
+    )
+      ? (record.deferredAction as HookLifecycleStatus["deferredAction"])
+      : fallback.deferredAction,
+    remainingRisk: HOOK_LIFECYCLE_RISK_VALUES.includes(
+      record.remainingRisk as HookLifecycleStatus["remainingRisk"],
+    )
+      ? (record.remainingRisk as HookLifecycleStatus["remainingRisk"])
+      : fallback.remainingRisk,
+    nextAutomaticStep:
+      typeof record.nextAutomaticStep === "string" ? record.nextAutomaticStep : null,
+    message: typeof record.message === "string" ? record.message : fallback.message,
+    pending: Boolean(record.pending),
+    checkedAt: typeof record.checkedAt === "string" ? record.checkedAt : null,
+    objectives: {
+      inertNow: Boolean(objectives.inertNow),
+      removedFromHooksJson: Boolean(objectives.removedFromHooksJson),
+      unloadedFromLiveRuntime: Boolean(objectives.unloadedFromLiveRuntime),
+    },
+  };
+}
+
+export function parseHookLifecycleStatus(value: string | null | undefined): HookLifecycleStatus {
+  if (!value) {
+    return createDefaultHookLifecycleStatus();
+  }
+
+  try {
+    return normalizeHookLifecycleStatus(JSON.parse(value));
+  } catch {
+    return createDefaultHookLifecycleStatus();
+  }
 }
 
 export function normalizeScope(value: unknown): LoopScope {
@@ -373,11 +477,19 @@ export function createNotification(notification: CreateLoopNotificationInput): L
 }
 
 export function buildTelegramBotUrl(botToken: string) {
-  return `https://api.telegram.org/bot${botToken}/sendMessage`;
+  return `https://api.telegram.org/bot${resolveTelegramBotToken(botToken)}/sendMessage`;
 }
 
 export function buildTelegramApiUrl(botToken: string, method: string) {
-  return `https://api.telegram.org/bot${botToken}/${method}`;
+  return `https://api.telegram.org/bot${resolveTelegramBotToken(botToken)}/${method}`;
+}
+
+export function buildTelegramBotUrlForStorage(botTokenOrRef: string) {
+  return `https://api.telegram.org/bot${botTokenOrRef.trim()}/sendMessage`;
+}
+
+export function resolveSlackWebhookUrlForDelivery(webhookUrlOrRef: string) {
+  return resolveSlackWebhookUrl(webhookUrlOrRef);
 }
 
 function parseTelegramBotTokenFromUrl(botUrl: string | null) {
@@ -453,18 +565,21 @@ export function notificationInsertFromValue(
     webhookUrl: null,
     chatId: notification.chatId,
     botToken: notification.botToken,
-    botUrl: buildTelegramBotUrl(notification.botToken),
+    botUrl: buildTelegramBotUrlForStorage(notification.botToken),
     chatUsername: notification.chatUsername,
     chatDisplayName: notification.chatDisplayName,
     createdAt: notification.createdAt,
   };
 }
 
-export function buildNewSession(sessionId: string, sessionRef: string): typeof sessions.$inferInsert {
+export function buildNewSession(
+  threadId: string,
+  sessionRef: string,
+): typeof sessions.$inferInsert {
   const timestamp = nowIsoString();
 
   return {
-    sessionId,
+    threadId,
     sessionRef,
     source: "startup",
     cwd: null,
@@ -477,7 +592,7 @@ export function buildNewSession(sessionId: string, sessionRef: string): typeof s
     presetOverridden: false,
     completionCheckId: null,
     completionCheckWaitForReply: false,
-    title: null,
+    threadName: null,
     transcriptPath: null,
     lastAssistantMessage: null,
   };
@@ -576,7 +691,8 @@ function mapSessionRow(
       );
 
   return {
-    sessionId: row.sessionId,
+    threadId: row.threadId,
+    sessionId: row.threadId,
     sessionRef: row.sessionRef,
     source: LOOP_SESSION_SOURCE_VALUES.includes(row.source) ? row.source : "startup",
     cwd: row.cwd,
@@ -593,24 +709,36 @@ function mapSessionRow(
     completionCheckWaitForReply: completionCheckState.completionCheckWaitForReply,
     effectiveCompletionCheckId: completionCheckState.effectiveCompletionCheckId,
     effectiveCompletionCheckWaitForReply: completionCheckState.effectiveCompletionCheckWaitForReply,
-    title: row.title,
+    threadName: row.threadName,
+    title: row.threadName,
     transcriptPath: row.transcriptPath,
     lastAssistantMessage: row.lastAssistantMessage,
   };
 }
 
-export function isPromptOnlyArtifact(
-  session: Pick<LoopSession, "transcriptPath" | "title" | "lastAssistantMessage">,
-) {
-  if (session.transcriptPath !== null) {
-    return false;
+export function mergeCanonicalThreadDiscoveryIntoSession(
+  session: Pick<LoopSession, "threadId" | "threadName" | "cwd">,
+  discovery: CanonicalThreadDiscoveryRecord | null,
+): Pick<LoopSession, "threadId" | "threadName" | "cwd"> {
+  if (discovery === null) {
+    return session;
   }
 
-  const titleLooksInternal = session.title?.startsWith("You are a helpful assistant.") ?? false;
+  return {
+    threadId: discovery.threadId,
+    threadName: discovery.threadName,
+    cwd: discovery.cwd,
+  };
+}
+
+export function isPromptOnlyArtifact(
+  session: Pick<LoopSession, "transcriptPath" | "threadName" | "lastAssistantMessage">,
+) {
+  const threadNameLooksInternal = looksInternalThreadNameArtifact(session.threadName);
   const assistantPayloadLooksInternal =
     session.lastAssistantMessage?.startsWith('{"title":') ?? false;
 
-  return titleLooksInternal || assistantPayloadLooksInternal;
+  return threadNameLooksInternal || assistantPayloadLooksInternal;
 }
 
 export function getSettingsRow() {
@@ -683,7 +811,7 @@ export function getStoredGlobalNotificationId(db: NotificationDefaultsReader) {
 
 export function applyGlobalNotificationToSession(
   tx: NotificationDefaultsWriter,
-  sessionId: string,
+  threadId: string,
   notificationId: string | null,
 ) {
   if (notificationId === null) {
@@ -692,14 +820,14 @@ export function applyGlobalNotificationToSession(
 
   tx.insert(sessionNotifications)
     .values({
-      sessionId,
+      threadId,
       notificationId,
     })
     .onConflictDoNothing()
     .run();
 }
 
-export function readSnapshotFromDatabase() {
+export function readSnapshotFromDatabase(): Omit<LoopndrollSnapshot, "health"> {
   const { db } = getLoopndrollDatabase(getLoopndrollPaths().databasePath);
   const settingsRow = getSettingsRow();
   const completionCheckRows = db
@@ -715,12 +843,12 @@ export function readSnapshotFromDatabase() {
   const sessionRows = db
     .select()
     .from(sessions)
-    .orderBy(asc(sessions.firstSeenAt), asc(sessions.sessionId))
+    .orderBy(asc(sessions.firstSeenAt), asc(sessions.threadId))
     .all();
   const sessionNotificationRows = db
     .select()
     .from(sessionNotifications)
-    .orderBy(asc(sessionNotifications.sessionId), asc(sessionNotifications.notificationId))
+    .orderBy(asc(sessionNotifications.threadId), asc(sessionNotifications.notificationId))
     .all();
   const normalizedGlobalCompletionCheckId = normalizeGlobalCompletionCheckId(
     completionCheckRows.map((row) => row.id),
@@ -729,18 +857,19 @@ export function readSnapshotFromDatabase() {
 
   const notificationIdMap = new Map<string, string[]>();
   for (const row of sessionNotificationRows) {
-    const current = notificationIdMap.get(row.sessionId);
+    const current = notificationIdMap.get(row.threadId);
     if (current) {
       current.push(row.notificationId);
       continue;
     }
 
-    notificationIdMap.set(row.sessionId, [row.notificationId]);
+    notificationIdMap.set(row.threadId, [row.notificationId]);
   }
 
   return {
     defaultPrompt: settingsRow.defaultPrompt,
     scope: normalizeScope(settingsRow.scope),
+    runtimeState: normalizeLoopndrollRuntimeState(settingsRow.runtimeState),
     globalPreset: normalizeLoopPreset(settingsRow.globalPreset),
     globalNotificationId: normalizeGlobalNotificationId(
       notificationRows.map((row) => row.id),
@@ -749,13 +878,15 @@ export function readSnapshotFromDatabase() {
     globalCompletionCheckId: normalizedGlobalCompletionCheckId,
     globalCompletionCheckWaitForReply: settingsRow.globalCompletionCheckWaitForReply,
     hooksAutoRegistration: settingsRow.hooksAutoRegistration,
+    mirrorEnabled: settingsRow.mirrorEnabled,
     notifications: notificationRows.map(mapNotificationRow),
     completionChecks: completionCheckRows.map(mapCompletionCheckRow),
+    hookLifecycle: parseHookLifecycleStatus(settingsRow.hookLifecycleStatusJson),
     sessions: sessionRows
       .map((row) =>
         mapSessionRow(
           row,
-          notificationIdMap.get(row.sessionId) ?? [],
+          notificationIdMap.get(row.threadId) ?? [],
           normalizeLoopPreset(settingsRow.globalPreset),
           normalizedGlobalCompletionCheckId,
           settingsRow.globalCompletionCheckWaitForReply,

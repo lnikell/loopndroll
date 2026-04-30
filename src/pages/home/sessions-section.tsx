@@ -61,6 +61,38 @@ function getEmptyStateMessage(showArchivedSessions: boolean) {
     : "Start a chat in Codex so it appears here...";
 }
 
+function getProjectLabel(cwd: string | null | undefined) {
+  if (typeof cwd !== "string" || cwd.trim().length === 0) {
+    return "Projectless";
+  }
+
+  const segments = cwd
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  return segments.at(-1) ?? "Projectless";
+}
+
+function groupSessionsByProject(sessions: LoopSession[]) {
+  const grouped = new Map<string, LoopSession[]>();
+  for (const session of sessions) {
+    const projectLabel = getProjectLabel(session.cwd);
+    const current = grouped.get(projectLabel);
+    if (current) {
+      current.push(session);
+      continue;
+    }
+    grouped.set(projectLabel, [session]);
+  }
+
+  return [...grouped.entries()].map(([projectLabel, projectSessions]) => ({
+    projectLabel,
+    sessions: projectSessions,
+  }));
+}
+
 function getSessionTimingLabel(session: LoopSession, showArchivedSessions: boolean, now: number) {
   if (showArchivedSessions) {
     return "";
@@ -86,6 +118,24 @@ function getSessionTimingLabel(session: LoopSession, showArchivedSessions: boole
   }
 
   return registeredText ? `Registered ${registeredText}` : "";
+}
+
+function ProjectGroupHeading({ projectLabel, count }: { projectLabel: string; count: number }) {
+  const isProjectless = projectLabel === "Projectless";
+
+  return (
+    <div className="flex items-center justify-between border-b border-[#292929] pb-2">
+      <div className="min-w-0">
+        <p className="truncate text-sm tracking-[0.18em] text-foreground/45 uppercase">
+          {isProjectless ? "Projectless" : "Project"}
+        </p>
+        <h3 className="truncate text-base leading-snug text-foreground">{projectLabel}</h3>
+      </div>
+      <span className="shrink-0 text-xs text-foreground/45">
+        {count} {count === 1 ? "chat" : "chats"}
+      </span>
+    </div>
+  );
 }
 
 function HeaderLink({ children, onClick }: { children: ReactNode; onClick: () => void }) {
@@ -311,11 +361,56 @@ function resolveDisplayedCompletionCheckConfig(
   };
 }
 
+function SessionNotificationsMenuSection({
+  notifications,
+  onClose,
+  onNotificationClear,
+  onNotificationToggle,
+  session,
+}: {
+  notifications: LoopNotification[];
+  onClose: () => void;
+  onNotificationClear: (sessionId: string) => void;
+  onNotificationToggle: (session: LoopSession, notificationId: string, checked: boolean) => void;
+  session: LoopSession;
+}) {
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+      <DropdownMenuItem disabled className="text-xs leading-relaxed opacity-80">
+        Attach Telegram here before using Await Reply.
+      </DropdownMenuItem>
+      <DropdownMenuCheckboxItem
+        checked={session.notificationIds.length === 0}
+        onCheckedChange={() => {
+          onNotificationClear(session.sessionId);
+          onClose();
+        }}
+      >
+        None
+      </DropdownMenuCheckboxItem>
+      {notifications.map((notification) => (
+        <DropdownMenuCheckboxItem
+          key={notification.id}
+          checked={session.notificationIds.includes(notification.id)}
+          onCheckedChange={(checked) => {
+            onNotificationToggle(session, notification.id, Boolean(checked));
+            onClose();
+          }}
+        >
+          {notification.label}
+        </DropdownMenuCheckboxItem>
+      ))}
+    </DropdownMenuGroup>
+  );
+}
+
 function SessionActionsTrigger({ sessionRef }: { sessionRef: string }) {
   return (
     <DropdownMenuTrigger
-      aria-label={`Open actions for ${sessionRef}`}
+      aria-label={`Open actions and notification settings for ${sessionRef}`}
       className="inline-flex size-8 items-center justify-center rounded-md border border-input bg-transparent shadow-xs transition-colors hover:bg-muted"
+      title="Notifications and chat actions"
     >
       <DotsThreeVertical aria-hidden="true" weight="bold" />
     </DropdownMenuTrigger>
@@ -360,30 +455,13 @@ function SessionActionsContent({
     <DropdownMenuContent className="w-58" align="end">
       {showArchivedSessions ? null : (
         <>
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-            <DropdownMenuCheckboxItem
-              checked={session.notificationIds.length === 0}
-              onCheckedChange={() => {
-                onNotificationClear(session.sessionId);
-                onClose();
-              }}
-            >
-              None
-            </DropdownMenuCheckboxItem>
-            {notifications.map((notification) => (
-              <DropdownMenuCheckboxItem
-                key={notification.id}
-                checked={session.notificationIds.includes(notification.id)}
-                onCheckedChange={(checked) => {
-                  onNotificationToggle(session, notification.id, Boolean(checked));
-                  onClose();
-                }}
-              >
-                {notification.label}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuGroup>
+          <SessionNotificationsMenuSection
+            notifications={notifications}
+            onClose={onClose}
+            onNotificationClear={onNotificationClear}
+            onNotificationToggle={onNotificationToggle}
+            session={session}
+          />
           {selectedSessionPreset === "completion-checks" ? (
             <SessionCompletionChecksSection
               completionChecks={completionChecks}
@@ -692,6 +770,8 @@ function SessionsListSection({
   sessions: LoopSession[];
   showArchivedSessions: boolean;
 }) {
+  const groupedSessions = groupSessionsByProject(sessions);
+
   return (
     <motion.div
       key={showArchivedSessions ? "archived-chats" : "registered-chats"}
@@ -707,24 +787,31 @@ function SessionsListSection({
           onToggleArchivedSessions={onToggleArchivedSessions}
         />
       </motion.div>
-      <HomeSessionsTable
-        completionChecks={completionChecks}
-        notifications={notifications}
-        now={now}
-        onDelete={onDelete}
-        onNotificationClear={onNotificationClear}
-        onNotificationToggle={onNotificationToggle}
-        onPresetAction={onPresetAction}
-        onPresetSelection={onPresetSelection}
-        onSetArchived={onSetArchived}
-        onUpdateSessionCompletionCheckConfig={onUpdateSessionCompletionCheckConfig}
-        openActionsSessionId={openActionsSessionId}
-        pendingSessionPresets={pendingSessionPresets}
-        sessionRefs={sessionRefs}
-        sessions={sessions}
-        setOpenActionsSessionId={setOpenActionsSessionId}
-        showArchivedSessions={showArchivedSessions}
-      />
+      <div className="space-y-7">
+        {groupedSessions.map((group) => (
+          <section key={group.projectLabel} className="space-y-1.5">
+            <ProjectGroupHeading count={group.sessions.length} projectLabel={group.projectLabel} />
+            <HomeSessionsTable
+              completionChecks={completionChecks}
+              notifications={notifications}
+              now={now}
+              onDelete={onDelete}
+              onNotificationClear={onNotificationClear}
+              onNotificationToggle={onNotificationToggle}
+              onPresetAction={onPresetAction}
+              onPresetSelection={onPresetSelection}
+              onSetArchived={onSetArchived}
+              onUpdateSessionCompletionCheckConfig={onUpdateSessionCompletionCheckConfig}
+              openActionsSessionId={openActionsSessionId}
+              pendingSessionPresets={pendingSessionPresets}
+              sessionRefs={sessionRefs}
+              sessions={group.sessions}
+              setOpenActionsSessionId={setOpenActionsSessionId}
+              showArchivedSessions={showArchivedSessions}
+            />
+          </section>
+        ))}
+      </div>
     </motion.div>
   );
 }

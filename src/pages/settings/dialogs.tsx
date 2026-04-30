@@ -82,7 +82,7 @@ function TelegramBotTokenField({
         <Input
           aria-invalid={Boolean(botTokenError)}
           id="notification-bot-token"
-          placeholder="123456789:AA..."
+          placeholder="<bot-id>:<bot-secret>"
           {...form.register("botToken", {
             onChange: () => {
               form.setValue("telegramChatId", "");
@@ -134,21 +134,28 @@ function TelegramChatField({
         ? "Enter a token to load chats"
         : isLoadingTelegramChats
           ? "Loading chats..."
-          : "No chats found";
+          : "No direct-message chats found";
 
   return (
     <Field data-invalid={Boolean(telegramChatIdError)}>
       <FieldContent>
         <FieldLabel htmlFor="notification-telegram-chat">Chat</FieldLabel>
         <Combobox
-          items={selectedTelegramChat ? [selectedTelegramChat, ...telegramChatItems] : telegramChatItems}
+          items={
+            selectedTelegramChat ? [selectedTelegramChat, ...telegramChatItems] : telegramChatItems
+          }
           isItemEqualToValue={(item, value) => item.value === value.value}
           itemToStringLabel={(item) => item.label}
           itemToStringValue={(item) => item.value}
           onValueChange={(chat) => {
-            form.setValue("telegramChatId", chat?.chatId ?? "", { shouldDirty: true, shouldValidate: true });
+            form.setValue("telegramChatId", chat?.chatId ?? "", {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
             form.setValue("telegramChatUsername", chat?.username ?? "", { shouldDirty: true });
-            form.setValue("telegramChatDisplayName", chat?.displayName ?? "", { shouldDirty: true });
+            form.setValue("telegramChatDisplayName", chat?.displayName ?? "", {
+              shouldDirty: true,
+            });
             form.clearErrors("telegramChatId");
           }}
           value={selectedTelegramChat}
@@ -160,7 +167,7 @@ function TelegramChatField({
                 ? "Enter token first"
                 : isLoadingTelegramChats
                   ? "Loading chats..."
-                  : "Search chats"
+                  : "Search direct messages"
             }
           />
           <ComboboxContent>
@@ -174,7 +181,9 @@ function TelegramChatField({
             </ComboboxList>
           </ComboboxContent>
         </Combobox>
-        <FieldDescription>Send a message in the chat with the bot, and it will appear here.</FieldDescription>
+        <FieldDescription>
+          Send the bot a direct message, and it will appear here. Groups and channels are ignored.
+        </FieldDescription>
         {shouldShowTelegramChatsError ? (
           <FieldError>{telegramChatsError}</FieldError>
         ) : telegramChatIdError ? (
@@ -218,6 +227,21 @@ function TelegramFields(props: {
   );
 }
 
+function NotificationDialogFooter(props: { editingNotificationId: string | null }) {
+  return (
+    <DialogFooter className="-mx-6 -mb-6 mt-2 border-t bg-muted/50 px-6 py-4 sm:justify-end">
+      <DialogClose asChild>
+        <Button size="sm" type="button" variant="outline">
+          Cancel
+        </Button>
+      </DialogClose>
+      <Button size="sm" type="submit">
+        {props.editingNotificationId ? "Save changes" : "Create"}
+      </Button>
+    </DialogFooter>
+  );
+}
+
 export function NotificationDialog(props: {
   botTokenError: string | undefined;
   editingNotificationId: string | null;
@@ -242,7 +266,9 @@ export function NotificationDialog(props: {
       <DialogContent className="sm:max-w-[480px]">
         <form className="grid gap-6" onSubmit={props.onSubmit}>
           <DialogHeader>
-            <DialogTitle>{props.editingNotificationId ? "Edit Notification" : "Add Notification"}</DialogTitle>
+            <DialogTitle>
+              {props.editingNotificationId ? "Edit Notification" : "Add Notification"}
+            </DialogTitle>
           </DialogHeader>
           <FieldGroup>
             <Field>
@@ -303,12 +329,7 @@ export function NotificationDialog(props: {
               />
             )}
           </FieldGroup>
-          <DialogFooter className="-mx-6 -mb-6 mt-2 border-t bg-muted/50 px-6 py-4 sm:justify-end">
-            <DialogClose asChild>
-              <Button size="sm" type="button" variant="outline">Cancel</Button>
-            </DialogClose>
-            <Button size="sm" type="submit">{props.editingNotificationId ? "Save changes" : "Create"}</Button>
-          </DialogFooter>
+          <NotificationDialogFooter editingNotificationId={props.editingNotificationId} />
         </form>
       </DialogContent>
     </Dialog>
@@ -328,9 +349,12 @@ export function CompletionCheckDialog(props: {
       <DialogContent className="sm:max-w-[560px]">
         <form className="grid gap-6" onSubmit={props.onSubmit}>
           <DialogHeader>
-            <DialogTitle>{props.editingCompletionCheckId ? "Edit Completion Check" : "Add Completion Check"}</DialogTitle>
+            <DialogTitle>
+              {props.editingCompletionCheckId ? "Edit Completion Check" : "Add Completion Check"}
+            </DialogTitle>
             <DialogDescription>
-              Create reusable command groups that Completion checks mode runs before Codex is allowed to finish.
+              Create reusable command groups that Completion checks mode runs before Codex is
+              allowed to finish.
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>
@@ -360,16 +384,23 @@ export function CompletionCheckDialog(props: {
                     },
                   })}
                 />
-                <FieldDescription>Enter one shell command per line. Commands run sequentially and stop on the first failure.</FieldDescription>
+                <FieldDescription>
+                  Enter one shell command per line. Commands run sequentially and stop on the first
+                  failure.
+                </FieldDescription>
                 {props.commandsError ? <FieldError>{props.commandsError}</FieldError> : null}
               </FieldContent>
             </Field>
           </FieldGroup>
           <DialogFooter className="-mx-6 -mb-6 mt-2 border-t bg-muted/50 px-6 py-4 sm:justify-end">
             <DialogClose asChild>
-              <Button size="sm" type="button" variant="outline">Cancel</Button>
+              <Button size="sm" type="button" variant="outline">
+                Cancel
+              </Button>
             </DialogClose>
-            <Button size="sm" type="submit">{props.editingCompletionCheckId ? "Save changes" : "Create"}</Button>
+            <Button size="sm" type="submit">
+              {props.editingCompletionCheckId ? "Save changes" : "Create"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
