@@ -15,16 +15,22 @@ import {
   deleteSession,
   ensureLoopndrollSetup,
   getLoopndrollState,
+  migrateNotificationSecretsToKeychain,
+  pauseLoopndroll,
   registerHooks,
+  resumeLoopndroll,
   saveDefaultPrompt,
   setGlobalCompletionCheckConfig,
   setGlobalNotification,
   setGlobalPreset,
+  setMirrorEnabled,
   setSessionArchived,
   setSessionNotifications,
   setLoopScope,
   setSessionCompletionCheckConfig,
   setSessionPreset,
+  startLoopndroll,
+  stopLoopndroll,
   updateCompletionCheck,
   updateNotification,
 } from "./loopndroll";
@@ -44,6 +50,7 @@ type UseLoopndrollStateResult = {
   }) => Promise<void>;
   removeNotification: (notificationId: string) => Promise<void>;
   removeCompletionCheck: (completionCheckId: string) => Promise<void>;
+  migrateSecrets: () => Promise<void>;
   updateScope: (scope: LoopScope) => Promise<void>;
   updateGlobalPreset: (preset: LoopPreset | null) => Promise<void>;
   updateGlobalNotification: (notificationId: string | null) => Promise<void>;
@@ -51,6 +58,7 @@ type UseLoopndrollStateResult = {
     completionCheckId: string | null,
     waitForReplyAfterCompletion: boolean,
   ) => Promise<void>;
+  updateMirrorEnabled: (enabled: boolean) => Promise<void>;
   updateSessionNotifications: (sessionId: string, notificationIds: string[]) => Promise<void>;
   updateSessionPreset: (sessionId: string, preset: LoopPreset | null) => Promise<void>;
   updateSessionCompletionCheckConfig: (
@@ -62,6 +70,10 @@ type UseLoopndrollStateResult = {
   removeSession: (sessionId: string) => Promise<void>;
   installHooks: () => Promise<void>;
   uninstallHooks: () => Promise<void>;
+  pauseLoopndroll: () => Promise<void>;
+  resumeLoopndroll: () => Promise<void>;
+  startLoopndroll: () => Promise<void>;
+  stopLoopndroll: () => Promise<void>;
   refresh: () => Promise<void>;
 };
 
@@ -166,6 +178,9 @@ function createLoopndrollActions(
     removeCompletionCheck(completionCheckId: string) {
       return runMutation(() => deleteCompletionCheck(completionCheckId));
     },
+    migrateSecrets() {
+      return runMutation(() => migrateNotificationSecretsToKeychain());
+    },
     updateScope(scope: LoopScope) {
       return runMutation(() => setLoopScope(scope));
     },
@@ -182,6 +197,9 @@ function createLoopndrollActions(
       return runMutation(() =>
         setGlobalCompletionCheckConfig(completionCheckId, waitForReplyAfterCompletion),
       );
+    },
+    updateMirrorEnabled(enabled: boolean) {
+      return runMutation(() => setMirrorEnabled(enabled));
     },
     updateSessionNotifications(sessionId: string, notificationIds: string[]) {
       return runMutation(() => setSessionNotifications(sessionId, notificationIds));
@@ -209,6 +227,18 @@ function createLoopndrollActions(
     },
     uninstallHooks() {
       return runMutation(() => clearHooks());
+    },
+    pauseLoopndroll() {
+      return runMutation(() => pauseLoopndroll());
+    },
+    resumeLoopndroll() {
+      return runMutation(() => resumeLoopndroll());
+    },
+    startLoopndroll() {
+      return runMutation(() => startLoopndroll());
+    },
+    stopLoopndroll() {
+      return runMutation(() => stopLoopndroll());
     },
     refresh() {
       return runMutation(() => getLoopndrollState());

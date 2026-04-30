@@ -16,24 +16,33 @@ import {
   clearHooks,
   createCompletionCheck,
   createLoopNotification,
+  clearStartupRecoveryMarker,
   deleteCompletionCheck,
   deleteLoopNotification,
   ensureLoopndrollSetup,
   getTelegramChats as fetchTelegramChats,
   getLoopndrollSnapshot,
+  migrateNotificationSecretsToKeychain,
+  pauseLoopndroll,
   registerHooks,
   revealHooksFile,
+  resetActiveLoopStateOnStartup,
+  resumeLoopndroll,
   saveDefaultPrompt,
   deleteSession,
   setGlobalCompletionCheckConfig,
   setGlobalNotification,
   setGlobalPreset,
+  setMirrorEnabled,
   setSessionArchived as persistSessionArchived,
   setSessionCompletionCheckConfig,
   setSessionNotifications as persistSessionNotifications,
   setLoopScope,
   setSessionPreset,
+  startLoopndroll,
+  startHookRemovalPendingMonitor,
   startLoopndrollTelegramBridge,
+  stopLoopndroll,
   updateCompletionCheck,
   updateLoopNotification,
 } from "./loopndroll";
@@ -511,6 +520,62 @@ function getAppRpcRequestHandlers() {
   };
 }
 
+function getLoopndrollSessionRpcRequestHandlers() {
+  return {
+    setSessionNotifications({
+      sessionId,
+      notificationIds,
+    }: {
+      sessionId: string;
+      notificationIds: string[];
+    }) {
+      return persistSessionNotifications(sessionId, notificationIds);
+    },
+    setSessionPreset({
+      sessionId,
+      preset,
+    }: {
+      sessionId: string;
+      preset: Parameters<typeof setSessionPreset>[1];
+    }) {
+      return setSessionPreset(sessionId, preset);
+    },
+    setSessionCompletionCheckConfig({
+      sessionId,
+      completionCheckId,
+      waitForReplyAfterCompletion,
+    }: {
+      sessionId: string;
+      completionCheckId: string | null;
+      waitForReplyAfterCompletion: boolean;
+    }) {
+      return setSessionCompletionCheckConfig(
+        sessionId,
+        completionCheckId,
+        waitForReplyAfterCompletion,
+      );
+    },
+    setSessionArchived({ sessionId, archived }: { sessionId: string; archived: boolean }) {
+      return persistSessionArchived(sessionId, archived);
+    },
+    deleteSession({ sessionId }: { sessionId: string }) {
+      return deleteSession(sessionId);
+    },
+  };
+}
+
+function getLoopndrollLifecycleRpcRequestHandlers() {
+  return {
+    registerHooks,
+    clearHooks,
+    pauseLoopndroll,
+    resumeLoopndroll,
+    startLoopndroll,
+    stopLoopndroll,
+    revealHooksFile,
+  };
+}
+
 function getLoopndrollRpcRequestHandlers() {
   return {
     ensureLoopndrollSetup,
@@ -518,7 +583,11 @@ function getLoopndrollRpcRequestHandlers() {
     saveDefaultPrompt({ defaultPrompt }: { defaultPrompt: string }) {
       return saveDefaultPrompt(defaultPrompt);
     },
-    createNotification({ notification }: { notification: Parameters<typeof createLoopNotification>[0] }) {
+    createNotification({
+      notification,
+    }: {
+      notification: Parameters<typeof createLoopNotification>[0];
+    }) {
       return createLoopNotification(notification);
     },
     createCompletionCheck({
@@ -538,15 +607,13 @@ function getLoopndrollRpcRequestHandlers() {
     }) {
       return updateLoopNotification(notification);
     },
+    migrateNotificationSecretsToKeychain,
     updateCompletionCheck({
       completionCheck,
     }: {
       completionCheck: Parameters<typeof updateCompletionCheck>[0];
     }) {
       return updateCompletionCheck(completionCheck);
-    },
-    setSessionNotifications({ sessionId, notificationIds }: { sessionId: string; notificationIds: string[] }) {
-      return persistSessionNotifications(sessionId, notificationIds);
     },
     deleteNotification({ notificationId }: { notificationId: string }) {
       return deleteLoopNotification(notificationId);
@@ -572,33 +639,11 @@ function getLoopndrollRpcRequestHandlers() {
     }) {
       return setGlobalCompletionCheckConfig(completionCheckId, waitForReplyAfterCompletion);
     },
-    setSessionPreset({ sessionId, preset }: { sessionId: string; preset: Parameters<typeof setSessionPreset>[1] }) {
-      return setSessionPreset(sessionId, preset);
+    setMirrorEnabled({ enabled }: { enabled: boolean }) {
+      return setMirrorEnabled(enabled);
     },
-    setSessionCompletionCheckConfig({
-      sessionId,
-      completionCheckId,
-      waitForReplyAfterCompletion,
-    }: {
-      sessionId: string;
-      completionCheckId: string | null;
-      waitForReplyAfterCompletion: boolean;
-    }) {
-      return setSessionCompletionCheckConfig(
-        sessionId,
-        completionCheckId,
-        waitForReplyAfterCompletion,
-      );
-    },
-    setSessionArchived({ sessionId, archived }: { sessionId: string; archived: boolean }) {
-      return persistSessionArchived(sessionId, archived);
-    },
-    deleteSession({ sessionId }: { sessionId: string }) {
-      return deleteSession(sessionId);
-    },
-    registerHooks,
-    clearHooks,
-    revealHooksFile,
+    ...getLoopndrollSessionRpcRequestHandlers(),
+    ...getLoopndrollLifecycleRpcRequestHandlers(),
   };
 }
 
@@ -616,8 +661,40 @@ function createWindowRpc() {
 
 const windowRpc = createWindowRpc();
 
+function registerStartupRecoveryCleanup() {
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) {
+      return;
+    }
+    cleaned = true;
+    clearStartupRecoveryMarker();
+  };
+
+  process.once("exit", cleanup);
+  process.once("SIGTERM", () => {
+    cleanup();
+    process.exit(0);
+  });
+  process.once("SIGINT", () => {
+    cleanup();
+    process.exit(0);
+  });
+}
+
 installApplicationMenu();
-startLoopndrollTelegramBridge();
+try {
+  resetActiveLoopStateOnStartup();
+  registerStartupRecoveryCleanup();
+} catch (error) {
+  console.error("Loopndroll startup active-state reset failed.", error);
+}
+if (process.env["LOOPNDROLL_DISABLE_HOOK_REMOVAL_MONITOR"] !== "1") {
+  void startHookRemovalPendingMonitor();
+}
+if (process.env["LOOPNDROLL_DISABLE_TELEGRAM_BRIDGE"] !== "1") {
+  startLoopndrollTelegramBridge();
+}
 void initializeUpdater();
 
 mainWindow = new BrowserWindow({

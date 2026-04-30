@@ -1,5 +1,6 @@
 import { type Database } from "bun:sqlite";
 import type { TelegramChatOption } from "../shared/app-rpc";
+import { filterTelegramDirectMessageChats } from "../shared/telegram-chat-policy";
 import { getLoopndrollDatabase } from "./db/client";
 import {
   TELEGRAM_ALLOWED_UPDATES,
@@ -182,7 +183,11 @@ function readKnownTelegramChats(db: Database, botToken: string): TelegramChatOpt
   }));
 }
 
-export function upsertKnownTelegramChats(db: Database, botToken: string, chats: TelegramChatOption[]) {
+export function upsertKnownTelegramChats(
+  db: Database,
+  botToken: string,
+  chats: TelegramChatOption[],
+) {
   if (chats.length === 0) {
     return;
   }
@@ -250,7 +255,7 @@ export async function getTelegramChats(
   const refreshedCachedChats = await enrichTelegramChats(normalizedBotToken, cachedChats);
   upsertKnownTelegramChats(client, normalizedBotToken, refreshedCachedChats);
   if (!waitForUpdates) {
-    return readKnownTelegramChats(client, normalizedBotToken);
+    return filterTelegramDirectMessageChats(readKnownTelegramChats(client, normalizedBotToken));
   }
 
   const params = new URLSearchParams({
@@ -274,10 +279,13 @@ export async function getTelegramChats(
   const discoveredChats = collectTelegramChatsFromUpdates(updates);
   const enrichedChats = await enrichTelegramChats(normalizedBotToken, discoveredChats);
   upsertKnownTelegramChats(client, normalizedBotToken, enrichedChats);
-  return readKnownTelegramChats(client, normalizedBotToken);
+  return filterTelegramDirectMessageChats(readKnownTelegramChats(client, normalizedBotToken));
 }
 
-export async function fetchTelegramUpdates(botToken: string, offset?: number): Promise<TelegramUpdate[]> {
+export async function fetchTelegramUpdates(
+  botToken: string,
+  offset?: number,
+): Promise<TelegramUpdate[]> {
   const params = new URLSearchParams();
   if (typeof offset === "number") {
     params.set("offset", String(offset));
@@ -320,6 +328,8 @@ export async function sendTelegramBridgeMessage(botToken: string, chatId: string
   if (!payload.ok) {
     throw new Error(payload.description || "Telegram sendMessage failed.");
   }
+
+  return payload;
 }
 
 async function fetchTelegramChatDetails(botToken: string, chatId: string) {

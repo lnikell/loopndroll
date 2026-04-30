@@ -76,6 +76,7 @@ const CHAT_CARD_THEME_CLASSES: Record<
 
 type ChatCardProps = {
   title?: ReactNode;
+  description?: ReactNode;
   marker?: ReactNode;
   markerContainerClassName?: string;
   theme?: ChatCardTheme;
@@ -93,6 +94,7 @@ type ChatCardProps = {
 
 export function ChatCard({
   title,
+  description,
   marker,
   markerContainerClassName,
   theme,
@@ -122,29 +124,40 @@ export function ChatCard({
       )}
     >
       <CardContent
-        className={cn("flex flex-1 items-start", placeholder && "p-0", contentClassName)}
+        className={cn(
+          "flex flex-1 flex-col items-start justify-between",
+          placeholder && "p-0",
+          contentClassName,
+        )}
       >
         {placeholder ? (
           <Skeleton className="size-full rounded-[inherit] bg-white/[0.03]" />
         ) : (
-          <div className="flex flex-col items-start gap-5">
-            <div
-              className={cn(
-                "flex size-12 items-center justify-center rounded-md",
-                themedClasses
-                  ? themedClasses.marker
-                  : "border border-white/10 bg-white/4 text-foreground",
-                markerContainerClassName,
-              )}
-            >
-              {marker}
+          <>
+            <div className="flex flex-col items-start gap-5">
+              <div
+                className={cn(
+                  "flex size-12 items-center justify-center rounded-md",
+                  themedClasses
+                    ? themedClasses.marker
+                    : "border border-white/10 bg-white/4 text-foreground",
+                  markerContainerClassName,
+                )}
+              >
+                {marker}
+              </div>
+              <CardTitle
+                className={cn("text-xl leading-snug tracking-normal font-normal", titleClassName)}
+              >
+                {title}
+              </CardTitle>
             </div>
-            <CardTitle
-              className={cn("text-xl leading-snug tracking-normal font-normal", titleClassName)}
-            >
-              {title}
-            </CardTitle>
-          </div>
+            {description ? (
+              <p className="max-w-56 text-xs leading-relaxed tracking-normal opacity-65">
+                {description}
+              </p>
+            ) : null}
+          </>
         )}
       </CardContent>
 
@@ -156,16 +169,11 @@ export function ChatCard({
             footerClassName,
           )}
         >
-          <div className={cn("min-h-8 min-w-0", themedClasses?.footerText)}>
-            {footerStart}
-          </div>
+          <div className={cn("min-h-8 min-w-0", themedClasses?.footerText)}>{footerStart}</div>
           <Button
             aria-pressed={isRunning}
             onClick={onAction}
-            className={cn(
-              "w-20 gap-1.5",
-              themedClasses?.button,
-            )}
+            className={cn("w-20 gap-1.5", themedClasses?.button)}
             size="sm"
             type="button"
             variant="outline"
